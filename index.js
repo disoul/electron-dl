@@ -17,16 +17,17 @@ function getFilenameFromMime(name, mime) {
 
 	return `${name}.${exts[0].ext}`;
 }
+const downloadItems = new Set();
+let receivedBytes = 0;
+let completedBytes = 0;
+let totalBytes = 0;
 
 function registerListener(session, opts = {}, cb = () => {}) {
-	const downloadItems = new Set();
-	let receivedBytes = 0;
-	let completedBytes = 0;
-	let totalBytes = 0;
 	const activeDownloadItems = () => downloadItems.size;
 	const progressDownloadItems = () => receivedBytes / totalBytes;
 
 	const listener = (e, item, webContents) => {
+		console.log('append item', item.getURL());
 		downloadItems.add(item);
 		totalBytes += item.getTotalBytes();
 
@@ -71,9 +72,14 @@ function registerListener(session, opts = {}, cb = () => {}) {
 			if (typeof opts.onProgress === 'function') {
 				opts.onProgress(progressDownloadItems());
 			}
+
+			if (typeof opts.onItemProgress === 'function') {
+				opts.onItemProgress(item.getReceivedBytes() / item.getTotalBytes(), item);
+			}
 		});
 
 		item.on('done', (e, state) => {
+			console.log('done item', item.getURL());
 			completedBytes += item.getTotalBytes();
 			downloadItems.delete(item);
 
@@ -91,6 +97,7 @@ function registerListener(session, opts = {}, cb = () => {}) {
 			if (state === 'interrupted') {
 				const message = pupa(errorMessage, {filename: item.getFilename()});
 				electron.dialog.showErrorBox(errorTitle, message);
+				console.log('interupted', message);
 				cb(new Error(message));
 			} else if (state === 'completed') {
 				if (process.platform === 'darwin') {
@@ -103,6 +110,10 @@ function registerListener(session, opts = {}, cb = () => {}) {
 
 				if (opts.unregisterWhenDone) {
 					session.removeListener('will-download', listener);
+				}
+				console.log('complete')
+				if (typeof opts.onItemProgress === 'function') {
+					opts.onItemProgress(1, item);
 				}
 
 				cb(null, item);
@@ -118,17 +129,19 @@ module.exports = (opts = {}) => {
 		registerListener(session, opts);
 	});
 };
-
+let flag = true;
 module.exports.download = (win, url, opts) => new Promise((resolve, reject) => {
-	opts = Object.assign({}, opts, {unregisterWhenDone: true});
-
-	registerListener(win.webContents.session, opts, (err, item) => {
-		if (err) {
-			reject(err);
-		} else {
-			resolve(item);
-		}
-	});
+	opts = Object.assign({}, opts, {unregisterWhenDone: false});
+	if (flag) {
+		registerListener(win.webContents.session, opts, (err, item) => {
+			if (err) {
+				reject(err);
+			} else {
+				resolve(item);
+			}
+		});
+		flag = false;
+	}
 
 	win.webContents.downloadURL(url);
 });
