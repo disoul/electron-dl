@@ -21,6 +21,8 @@ const downloadItems = new Set();
 let receivedBytes = 0;
 let completedBytes = 0;
 let totalBytes = 0;
+    
+let dir = app.getPath('downloads');
 
 function registerListener(session, opts = {}, cb = () => {}) {
 	const activeDownloadItems = () => downloadItems.size;
@@ -37,7 +39,7 @@ function registerListener(session, opts = {}, cb = () => {}) {
 		}
 		const win = electron.BrowserWindow.fromWebContents(hostWebContents);
 
-		const dir = opts.directory || app.getPath('downloads');
+    console.log('dir', dir);
 		let filePath;
 		if (opts.filename) {
 			filePath = path.join(dir, opts.filename);
@@ -131,8 +133,11 @@ module.exports = (opts = {}) => {
 };
 let flag = true;
 module.exports.download = (win, url, opts) => new Promise((resolve, reject) => {
-	opts = Object.assign({}, opts, {unregisterWhenDone: false});
-	if (flag) {
+  opts = Object.assign({}, opts, {unregisterWhenDone: false});
+  if (opts.directory) {
+    dir = opts.directory;
+  }
+ 	if (flag) {
 		registerListener(win.webContents.session, opts, (err, item) => {
 			if (err) {
 				reject(err);
